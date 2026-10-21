@@ -28,6 +28,11 @@
       "message": "Merchant account is deactivated"
     },
     {
+      "code": 13,
+      "name": "MerchantAlreadyActive",
+      "message": "Merchant is already active and cannot be reactivated"
+    },
+    {
       "code": 20,
       "name": "PaymentNotFound",
       "message": "Order ID not found"
@@ -88,6 +93,21 @@
       "message": "Refund has already been completed or rejected"
     },
     {
+      "code": 36,
+      "name": "RefundNotRejected",
+      "message": "Refund must be in Rejected state to be disputed"
+    },
+    {
+      "code": 37,
+      "name": "DisputeUnauthorized",
+      "message": "Dispute can only be raised by the original payer"
+    },
+    {
+      "code": 38,
+      "name": "RefundNotDisputed",
+      "message": "Refund is not in Disputed state; cannot resolve"
+    },
+    {
       "code": 40,
       "name": "MultisigNotFound",
       "message": "Multisig payment not found"
@@ -116,6 +136,31 @@
       "code": 52,
       "name": "ArithmeticError",
       "message": "Arithmetic overflow or underflow"
+    },
+    {
+      "code": 60,
+      "name": "SubscriptionNotFound",
+      "message": "Subscription ID not found in storage"
+    },
+    {
+      "code": 61,
+      "name": "SubscriptionAlreadyExists",
+      "message": "A subscription with this ID already exists"
+    },
+    {
+      "code": 62,
+      "name": "SubscriptionNotActive",
+      "message": "Subscription is not in Active state (e.g. already cancelled)"
+    },
+    {
+      "code": 63,
+      "name": "SubscriptionIntervalNotElapsed",
+      "message": "Payment interval has not elapsed since the last charge"
+    },
+    {
+      "code": 71,
+      "name": "TokenNotAllowed",
+      "message": "The token contract address is not on the admin-managed allowlist"
     }
   ]
 }

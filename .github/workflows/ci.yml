@@ -349,6 +349,26 @@ jobs:
         with:
           command: check
 
+  # MISC-014: errors.ts / error-registry.json are generated from error.rs by
+  # sdk/scripts/generate-errors.js. Fail CI if the committed files have
+  # drifted from what error.rs would generate, so the two cannot silently
+  # go out of sync.
+  sdk-errors-sync:
+    name: SDK errors.ts in sync with error.rs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Regenerate sdk/errors.ts and sdk/error-registry.json
+        run: node sdk/scripts/generate-errors.js
+
+      - name: Fail if generated output differs from committed files
+        run: |
+          if ! git diff --exit-code -- sdk/errors.ts sdk/error-registry.json; then
+            echo "::error::sdk/errors.ts or sdk/error-registry.json is out of sync with contracts/payment-processing-contract/src/error.rs. Run 'node sdk/scripts/generate-errors.js' and commit the result."
+            exit 1
+          fi
+
   deploy-testnet:
     # DO-002: Automated testnet deployment job — triggered only on push to main
     # (not on PRs). Uses a CI-managed testnet key stored in GitHub Secrets as
