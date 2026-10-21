@@ -15,12 +15,13 @@ use alloc::vec;
 use soroban_sdk::{
     testutils::{Address as _, Ledger},
     token::StellarAssetClient,
-    Address, Bytes, BytesN, Env, String, Vec,
+    Address, Bytes, BytesN, Env, Map, String, Vec,
 };
 
 use ed25519_dalek::{Signer, SigningKey};
 
 use crate::{
+    error::PaymentError,
     types::{
         MerchantCategory, PaymentFilter, PaymentOrder, PaymentStatus, SortField, SortOrder,
         StatusFilter,
@@ -126,6 +127,7 @@ fn setup_payer_payments(
             amount,
             description: s(env, "d"),
             expires_at: 0,
+                metadata: None,
         };
         let (_pk, sig) = sign_order(env, &order);
         client.process_payment_with_signature(&payer, &order, &sig, &zero_key(env));
@@ -207,6 +209,7 @@ fn test_t003_filter_date_range() {
         amount: 100,
         description: s(&env, "d"),
         expires_at: 0,
+        metadata: None,
     };
     let (_pk1, sig1) = sign_order(&env, &o1);
     client.process_payment_with_signature(&payer, &o1, &sig1, &zero_key(&env));
@@ -221,6 +224,7 @@ fn test_t003_filter_date_range() {
         amount: 200,
         description: s(&env, "d"),
         expires_at: 0,
+        metadata: None,
     };
     let (_pk2, sig2) = sign_order(&env, &o2);
     client.process_payment_with_signature(&payer, &o2, &sig2, &zero_key(&env));
@@ -320,6 +324,7 @@ fn test_t003_filter_by_token() {
         amount: 100,
         description: s(&env, "d"),
         expires_at: 0,
+        metadata: None,
     };
     let (_pk_a, sig_a) = sign_order(&env, &oa);
     client.process_payment_with_signature(&payer, &oa, &sig_a, &zero_key(&env));
@@ -333,6 +338,7 @@ fn test_t003_filter_by_token() {
         amount: 200,
         description: s(&env, "d"),
         expires_at: 0,
+        metadata: None,
     };
     let (_pk_b, sig_b) = sign_order(&env, &ob);
     client.process_payment_with_signature(&payer, &ob, &sig_b, &zero_key(&env));
@@ -480,6 +486,7 @@ fn test_t003_sort_by_date_ascending() {
             amount: amt,
             description: s(&env, "d"),
             expires_at: 0,
+                metadata: None,
         };
         let (_pk, sig) = sign_order(&env, &order);
         client.process_payment_with_signature(&payer, &order, &sig, &zero_key(&env));
@@ -523,6 +530,7 @@ fn test_t003_sort_by_date_descending() {
             amount: amt,
             description: s(&env, "d"),
             expires_at: 0,
+                metadata: None,
         };
         let (_pk, sig) = sign_order(&env, &order);
         client.process_payment_with_signature(&payer, &order, &sig, &zero_key(&env));
@@ -655,4 +663,111 @@ fn test_t003_filter_no_match_empty_result() {
     assert_eq!(page.total, 0);
     assert_eq!(page.records.len(), 0);
     assert!(page.next_cursor.is_none());
+}
+
+// MISC-013: PaymentOrder.metadata — optional structured metadata for
+// off-chain reconciliation (e.g. customer ID, product SKU).
+//
+// A payment processed with metadata attached must carry that metadata
+// through to the stored PaymentRecord and be returned unchanged in history
+// queries such as `get_payer_payment_history`.
+#[test]
+fn test_misc013_payment_metadata_roundtrip_in_history() {
+    let (env, client) = setup();
+    let admin = Address::generate(&env);
+    let merchant = Address::generate(&env);
+    let payer = Address::generate(&env);
+    let token = create_token(&env, &admin);
+    client.set_admin(&admin_vec(&env, &admin), &1);
+    client.register_merchant(
+        &merchant,
+        &s(&env, "Store"),
+        &s(&env, "desc"),
+        &s(&env, "c@c.com"),
+        &MerchantCategory::Retail,
+        &None,
+    );
+    mint(&env, &token, &payer, 1_000);
+
+    let mut metadata = Map::new(&env);
+    metadata.set(s(&env, "customer_id"), s(&env, "CUST-42"));
+    metadata.set(s(&env, "sku"), s(&env, "SKU-7"));
+
+    let order = PaymentOrder {
+        order_id: b(&env, "META_001"),
+        merchant_address: merchant.clone(),
+        payer: payer.clone(),
+        token: token.clone(),
+        amount: 500,
+        description: s(&env, "with metadata"),
+        expires_at: 0,
+        metadata: Some(metadata.clone()),
+    };
+    let (_pk, sig) = sign_order(&env, &order);
+    client.process_payment_with_signature(&payer, &order, &sig, &zero_key(&env));
+
+    let page = client.get_payer_payment_history(
+        &payer, &None, &10, &None, &SortField::Date, &SortOrder::Ascending,
+    );
+    assert_eq!(page.records.len(), 1);
+    let record = page.records.get(0).unwrap();
+    assert_eq!(record.metadata, Some(metadata));
+}
+
+/// A payment processed with no metadata must round-trip as `None`, not an
+/// empty map, so callers can distinguish "no metadata supplied" from
+/// "metadata supplied but empty".
+#[test]
+fn test_misc013_payment_without_metadata_is_none() {
+    let (env, client) = setup();
+    let (_admin, _merchant, payer, _token) =
+        setup_payer_payments(&env, &client, &[42]);
+
+    let page = client.get_payer_payment_history(
+        &payer, &None, &10, &None, &SortField::Date, &SortOrder::Ascending,
+    );
+    assert_eq!(page.records.len(), 1);
+    assert_eq!(page.records.get(0).unwrap().metadata, None);
+}
+
+/// Metadata whose combined key+value size exceeds the 1 KB cap must be
+/// rejected with `InvalidInput` rather than silently stored.
+#[test]
+fn test_misc013_oversized_metadata_rejected() {
+    let (env, client) = setup();
+    let admin = Address::generate(&env);
+    let merchant = Address::generate(&env);
+    let payer = Address::generate(&env);
+    let token = create_token(&env, &admin);
+    client.set_admin(&admin_vec(&env, &admin), &1);
+    client.register_merchant(
+        &merchant,
+        &s(&env, "Store"),
+        &s(&env, "desc"),
+        &s(&env, "c@c.com"),
+        &MerchantCategory::Retail,
+        &None,
+    );
+    mint(&env, &token, &payer, 1_000);
+
+    // A single value just over 1024 bytes pushes the combined size over the cap.
+    let big_value: alloc::string::String = core::iter::repeat('x').take(1025).collect();
+    let mut metadata = Map::new(&env);
+    metadata.set(s(&env, "k"), s(&env, &big_value));
+
+    let order = PaymentOrder {
+        order_id: b(&env, "META_BIG"),
+        merchant_address: merchant.clone(),
+        payer: payer.clone(),
+        token: token.clone(),
+        amount: 500,
+        description: s(&env, "oversized metadata"),
+        expires_at: 0,
+        metadata: Some(metadata),
+    };
+    let (_pk, sig) = sign_order(&env, &order);
+    assert_eq!(
+        client.try_process_payment_with_signature(&payer, &order, &sig, &zero_key(&env)),
+        Err(Ok(PaymentError::InvalidInput))
+    );
 }

@@ -65,6 +65,7 @@ fn make_record(amount: i128, paid_at: u64, status: PaymentStatus) -> PaymentReco
         status,
         paid_at,
         description: desc,
+        metadata: None,
     }
 }
 

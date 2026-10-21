@@ -608,6 +608,7 @@ impl PaymentContract {
         }
         helper::validate_amount(order.amount)?;
         helper::validate_order_id(&order.order_id)?;
+        helper::validate_metadata(&order.metadata)?;
         if storage::get_payment(&env, &order.order_id).is_some() {
             return Err(PaymentError::PaymentAlreadyExists);
         }
@@ -645,6 +646,7 @@ impl PaymentContract {
             status: PaymentStatus::Completed,
             paid_at: now,
             description: order.description.clone(),
+            metadata: order.metadata.clone(),
         };
         storage::save_payment(&env, &record);
         storage::push_merchant_payment_id(&env, &order.merchant_address, &order.order_id);
@@ -1388,6 +1390,7 @@ impl PaymentContract {
         if storage::is_paused(&env) { return Err(PaymentError::ContractPaused); }
         initiator.require_auth();
         helper::validate_amount(order.amount)?;
+        helper::validate_metadata(&order.metadata)?;
         if storage::get_multisig(&env, &payment_id).is_some() {
             return Err(PaymentError::PaymentAlreadyExists);
         }
@@ -1536,6 +1539,7 @@ impl PaymentContract {
             status: PaymentStatus::Completed,
             paid_at: now,
             description: order.description.clone(),
+            metadata: order.metadata.clone(),
         };
         storage::save_payment(&env, &record);
         storage::push_merchant_payment_id(&env, &order.merchant_address, &order.order_id);

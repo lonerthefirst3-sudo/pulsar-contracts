@@ -2,11 +2,15 @@
 
 extern crate alloc;
 
-use soroban_sdk::{xdr::ToXdr, Address, Bytes, BytesN, Env, String, Vec};
+use soroban_sdk::{xdr::ToXdr, Address, Bytes, BytesN, Env, Map, String, Vec};
 
 use crate::error::PaymentError;
 use crate::storage;
 use crate::types::{PaymentFilter, PaymentRecord, PaymentStatus, StatusFilter};
+
+/// Maximum combined size, in bytes, of all keys and values in a
+/// [`crate::types::PaymentOrder`] `metadata` map (MISC-013).
+pub const MAX_METADATA_SIZE_BYTES: u32 = 1024;
 
 /// Require that `caller` is the contract admin.
 pub fn require_admin(env: &Env, caller: &Address) -> Result<(), PaymentError> {
@@ -137,6 +141,32 @@ pub fn validate_order_id(order_id: &Bytes) -> Result<(), PaymentError> {
         }
     }
 
+    Ok(())
+}
+
+/// Validate optional payment metadata (MISC-013).
+///
+/// Enforces that the combined byte length of every key and value in the map
+/// does not exceed [`MAX_METADATA_SIZE_BYTES`]. A missing map (`None`) is
+/// always valid and costs nothing.
+///
+/// # Errors
+/// Returns [`PaymentError::InvalidInput`] when the combined size of all keys
+/// and values exceeds [`MAX_METADATA_SIZE_BYTES`].
+pub fn validate_metadata(metadata: &Option<Map<String, String>>) -> Result<(), PaymentError> {
+    let Some(map) = metadata else {
+        return Ok(());
+    };
+    let mut total: u32 = 0;
+    for (key, value) in map.iter() {
+        total = total
+            .checked_add(key.len())
+            .and_then(|t| t.checked_add(value.len()))
+            .ok_or(PaymentError::ArithmeticError)?;
+        if total > MAX_METADATA_SIZE_BYTES {
+            return Err(PaymentError::InvalidInput);
+        }
+    }
     Ok(())
 }
 

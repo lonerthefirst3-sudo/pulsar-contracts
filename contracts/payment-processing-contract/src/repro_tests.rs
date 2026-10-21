@@ -50,6 +50,7 @@ fn make_order(env: &Env, merchant: &Address, payer: &Address, token: &Address) -
         amount: 1000,
         description: str(env, "Test order"),
         expires_at: 0,
+        metadata: None,
     }
 }
 
@@ -121,6 +122,7 @@ fn test_multisig_escrow_deducted_at_initiation() {
         amount: 1000,
         description: str(&env, "Multisig escrow test"),
         expires_at: 0,
+        metadata: None,
     };
     let mut signers = Vec::new(&env);
     signers.push_back(signer1.clone());
@@ -169,7 +171,7 @@ fn test_initiate_multisig_duplicate_signer_fails() {
     client.set_admin(&admins(&env, &admin), &1);
     client.register_merchant(&merchant, &str(&env, "Store"), &str(&env, "desc"), &str(&env, "c@c.com"), &MerchantCategory::Retail, &None);
     mint(&env, &token, &signer1, 5000);
-    let order = PaymentOrder { order_id: bytes(&env, "MS_DUP"), merchant_address: merchant.clone(), payer: signer1.clone(), token: token.clone(), amount: 1000, description: str(&env, "Multisig order"), expires_at: 0 };
+    let order = PaymentOrder { order_id: bytes(&env, "MS_DUP"), merchant_address: merchant.clone(), payer: signer1.clone(), token: token.clone(), amount: 1000, description: str(&env, "Multisig order"), expires_at: 0, metadata: None };
     let mut signers = Vec::new(&env);
     signers.push_back(signer1.clone());
     signers.push_back(signer1.clone());
@@ -267,6 +269,7 @@ fn test_multisig_expiry_blocks_sign() {
         amount: 1000,
         description: str(&env, "Multisig expiry sign test"),
         expires_at: 0,
+        metadata: None,
     };
     let mut signers = Vec::new(&env);
     signers.push_back(signer1.clone());
@@ -298,6 +301,7 @@ fn test_multisig_expiry_blocks_execute() {
         amount: 1000,
         description: str(&env, "Multisig expiry execute test"),
         expires_at: 0,
+        metadata: None,
     };
     let mut signers = Vec::new(&env);
     signers.push_back(signer1.clone());
@@ -331,6 +335,7 @@ fn test_multisig_within_expiry_succeeds() {
         amount: 1000,
         description: str(&env, "Multisig within expiry"),
         expires_at: 0,
+        metadata: None,
     };
     let mut signers = Vec::new(&env);
     signers.push_back(signer1.clone());

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-use soroban_sdk::{contracttype, Address, Bytes, BytesN, String, Vec};
+use soroban_sdk::{contracttype, Address, Bytes, BytesN, Map, String, Vec};
 
 // ── Merchant ──────────────────────────────────────────────────────────────────
 
@@ -51,6 +51,11 @@ pub struct PaymentOrder {
     /// This special-case is relied upon by existing integrations and is
     /// intentionally accepted by the contract.
     pub expires_at: u64,
+    /// Optional structured metadata (e.g. customer ID, product SKU) that
+    /// merchants can attach to a payment for off-chain reconciliation.
+    /// The combined size of all keys and values is capped at
+    /// `helper::MAX_METADATA_SIZE_BYTES` (see MISC-013).
+    pub metadata: Option<Map<String, String>>,
 }
 
 #[contracttype]
@@ -66,6 +71,8 @@ pub struct PaymentRecord {
     pub status: PaymentStatus,
     pub paid_at: u64,
     pub description: String,
+    /// Metadata carried over from the originating [`PaymentOrder`], if any.
+    pub metadata: Option<Map<String, String>>,
 }
 
 // ── Refund ────────────────────────────────────────────────────────────────────
