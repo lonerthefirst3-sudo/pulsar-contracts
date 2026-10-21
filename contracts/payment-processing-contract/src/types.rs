@@ -14,6 +14,27 @@ pub enum MerchantCategory {
     Other,
 }
 
+/// Merchant KYC / verification tier (MISC-012).
+///
+/// All merchants start at `Unverified` on registration. An admin (via the
+/// multi-sig threshold, see `helper::require_multi_admin`) can upgrade a
+/// merchant to `Verified` or `Premium` as they complete off-chain KYC. See
+/// `docs/MERCHANT_TIERS.md` for the tier criteria and upgrade process.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum MerchantTier {
+    /// Default tier for every newly registered merchant. No KYC has been
+    /// performed; the merchant is trusted only to the extent the contract
+    /// trusts any registered address.
+    Unverified,
+    /// Merchant has completed baseline off-chain identity verification.
+    Verified,
+    /// Merchant has completed enhanced verification (e.g. for high-volume
+    /// or regulated-market use) and may be eligible for higher per-transaction
+    /// limits in a future revision.
+    Premium,
+}
+
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Merchant {
@@ -25,6 +46,9 @@ pub struct Merchant {
     pub active: bool,
     pub registered_at: u64,
     pub signing_public_key: Option<BytesN<32>>,
+    /// KYC / verification tier (MISC-012). Defaults to `Unverified` at
+    /// registration and is changed only by an admin via `set_merchant_tier`.
+    pub tier: MerchantTier,
 }
 
 // ── Payment ───────────────────────────────────────────────────────────────────

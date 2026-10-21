@@ -33,9 +33,9 @@ use soroban_sdk::{
 use error::PaymentError;
 use storage::{REFUND_GRACE_BUFFER, REFUND_WINDOW};
 use types::{
-    DataKey, GlobalStats, Merchant, MerchantCategory, MerchantStats, MultisigPayment,
-    PaymentFilter, PaymentOrder, PaymentPage, PaymentRecord, PaymentStatus, RefundRecord,
-    RefundStatus, SortField, SortOrder,
+    DataKey, GlobalStats, Merchant, MerchantCategory, MerchantStats, MerchantTier,
+    MultisigPayment, PaymentFilter, PaymentOrder, PaymentPage, PaymentRecord, PaymentStatus,
+    RefundRecord, RefundStatus, SortField, SortOrder,
 };
 
 #[contract]
@@ -285,6 +285,7 @@ impl PaymentContract {
             active: true,
             registered_at: env.ledger().timestamp(),
             signing_public_key,
+            tier: MerchantTier::Unverified,
         };
         storage::save_merchant(&env, &merchant);
         env.events().publish(
@@ -292,6 +293,55 @@ impl PaymentContract {
             merchant_address,
         );
         Ok(())
+    }
+
+    /// Assign a KYC / verification tier to a merchant (MISC-012).
+    ///
+    /// All merchants start at [`MerchantTier::Unverified`] at registration.
+    /// Only an admin (via the multi-sig threshold) may upgrade or downgrade
+    /// a merchant's tier, after completing the corresponding off-chain KYC
+    /// process. See `docs/MERCHANT_TIERS.md` for tier criteria and the
+    /// upgrade process.
+    ///
+    /// # Parameters
+    /// - `admins` — Admin addresses satisfying the multi-sig threshold.
+    /// - `merchant_address` — The merchant whose tier is being changed.
+    /// - `tier` — The new tier to assign.
+    ///
+    /// # Errors
+    /// - [`PaymentError::Unauthorized`] if the admin multi-sig check fails.
+    /// - [`PaymentError::MerchantNotFound`] if the merchant does not exist.
+    ///
+    /// # Events
+    /// Emits `merchant_tier_set` with payload `(merchant_address, tier)`.
+    pub fn set_merchant_tier(
+        env: Env,
+        admins: Vec<Address>,
+        merchant_address: Address,
+        tier: MerchantTier,
+    ) -> Result<(), PaymentError> {
+        storage::bump_instance_ttl(&env);
+        helper::require_multi_admin(&env, admins)?;
+        let mut merchant = storage::get_merchant(&env, &merchant_address)
+            .ok_or(PaymentError::MerchantNotFound)?;
+        merchant.tier = tier.clone();
+        storage::save_merchant(&env, &merchant);
+        env.events().publish(
+            (String::from_str(&env, "merchant_tier_set"),),
+            (merchant_address, tier),
+        );
+        Ok(())
+    }
+
+    /// Returns the merchant's current KYC / verification tier (MISC-012).
+    ///
+    /// # Errors
+    /// - [`PaymentError::MerchantNotFound`] if the merchant does not exist.
+    pub fn get_merchant_tier(env: Env, merchant_address: Address) -> Result<MerchantTier, PaymentError> {
+        storage::bump_instance_ttl(&env);
+        let merchant = storage::get_merchant(&env, &merchant_address)
+            .ok_or(PaymentError::MerchantNotFound)?;
+        Ok(merchant.tier)
     }
 
     /// Enable or disable admin-whitelist mode for merchant registration.
